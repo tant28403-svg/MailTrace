@@ -8,7 +8,8 @@ results locally with masked targets and an audit trail.
 
 > **Use responsibly.** Only investigate addresses you own or are explicitly
 > authorized to assess. External providers receive the target address; review
-> `mailtrace sources list` and the confirmation prompt before running a scan.
+> `uv run mailtrace sources list` and the confirmation prompt before running a
+> scan.
 
 ## Features
 
@@ -57,21 +58,25 @@ until then use one of the source installs above.
 
 ```bash
 # Interactive TUI (default)
-mailtrace
+uv run mailtrace
 
 # Full CLI scan
-mailtrace scan user@example.com --profile full
+uv run mailtrace scan user@example.com --profile full
 
 # Individual checks
-mailtrace breach check user@example.com --format json
-mailtrace exposure search user@example.com --format csv
-mailtrace domain inspect example.com
+uv run mailtrace breach check user@example.com --format json
+uv run mailtrace exposure search user@example.com --format csv
+uv run mailtrace domain inspect example.com
 
 # Inventory and history
-mailtrace sources list
-mailtrace history list
-mailtrace report CASE-001 --format pdf --output report.pdf
+uv run mailtrace sources list
+uv run mailtrace history list
+uv run mailtrace report CASE-001 --format pdf --output report.pdf
 ```
+
+> If you installed the console script (`pip install -e .` or
+> `uv tool install mailtrace`), you can drop the `uv run` prefix and call
+> `mailtrace` directly.
 
 ## Configuration
 
@@ -96,6 +101,12 @@ MAILTRACE_GENERAL_CONFIRM_EXTERNAL=true
 MAILTRACE_GENERAL_LOG_LEVEL=INFO
 MAILTRACE_GENERAL_THEME=dark
 ```
+
+Provider toggles are only applied when a provider is enabled **and** its key is
+configured (emailrep.io and DNS need no key). The `MAILTRACE_` prefix is
+optional for provider toggles, so both `MAILTRACE_BREACHDIRECTORY_ENABLED` and
+`BREACHDIRECTORY_ENABLED` work. Providers without credentials or with the
+toggle disabled are skipped in scans.
 
 Provider toggles and timeouts can also be supplied in
 `~/.config/mailtrace/providers.toml`. Copy
@@ -134,9 +145,9 @@ without API keys.
 - External calls require explicit confirmation unless `--no-confirm` is used.
 - Cases are stored in a local SQLite database under the configured data
   directory; delete them from the history screen or with
-  `mailtrace case delete <id>`.
-- `mailtrace report <case-id> --format json` exports a full case snapshot for
-  inspection or archival.
+  `uv run mailtrace case delete <id>`.
+- `uv run mailtrace report <case-id> --format json` exports a full case
+  snapshot for inspection or archival.
 
 ## Development
 

@@ -127,6 +127,27 @@ class TestConfigSources:
         config = Config(_env_file=None)
         assert config.general.mask_output is False
 
+    def test_unprefixed_provider_toggle_in_env_file(self, monkeypatch, tmp_path):
+        """BREACHDIRECTORY_ENABLED in .env enables the provider."""
+        monkeypatch.delenv("BREACHDIRECTORY_ENABLED", raising=False)
+        monkeypatch.delenv("MAILTRACE_BREACHDIRECTORY_ENABLED", raising=False)
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "BREACHDIRECTORY_ENABLED=true\nBREACHDIRECTORY_API_KEY=test-key\n",
+            encoding="utf-8",
+        )
+
+        config = Config(_env_file=env_file)
+        assert config.breachdirectory_enabled is True
+        assert "breachdirectory" in config.get_enabled_providers()
+
+    def test_prefixed_provider_toggle_from_environment(self, monkeypatch):
+        """The MAILTRACE_ prefix is the canonical spelling for toggles."""
+        monkeypatch.delenv("BREACHDIRECTORY_ENABLED", raising=False)
+        monkeypatch.setenv("MAILTRACE_BREACHDIRECTORY_ENABLED", "true")
+        config = Config(_env_file=None)
+        assert config.breachdirectory_enabled is True
+
     def test_provider_toml_loading(self, monkeypatch, tmp_path):
         """Provider settings can be loaded from the documented TOML layout."""
         providers_file = tmp_path / "providers.toml"

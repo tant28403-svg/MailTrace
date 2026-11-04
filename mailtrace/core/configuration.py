@@ -163,7 +163,10 @@ class Config(BaseSettings):
     general: GeneralConfig = Field(default_factory=GeneralConfig)
 
     # HIBP
-    hibp_enabled: bool = True
+    hibp_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("MAILTRACE_HIBP_ENABLED", "HIBP_ENABLED"),
+    )
     hibp_api_key: str | None = Field(
         default=None,
         validation_alias=AliasChoices("HIBP_API_KEY", "MAILTRACE_HIBP_API_KEY"),
@@ -173,7 +176,10 @@ class Config(BaseSettings):
     hibp_rate_limit: int = 60
 
     # GitHub
-    github_enabled: bool = True
+    github_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("MAILTRACE_GITHUB_ENABLED", "GITHUB_ENABLED"),
+    )
     github_token: str | None = Field(
         default=None,
         validation_alias=AliasChoices("GITHUB_TOKEN", "MAILTRACE_GITHUB_TOKEN"),
@@ -183,7 +189,12 @@ class Config(BaseSettings):
     github_rate_limit: int = 60
 
     # Brave Search
-    brave_search_enabled: bool = False
+    brave_search_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "MAILTRACE_BRAVE_SEARCH_ENABLED", "BRAVE_SEARCH_ENABLED"
+        ),
+    )
     brave_search_api_key: str | None = Field(
         default=None,
         validation_alias=AliasChoices("BRAVE_API_KEY", "MAILTRACE_BRAVE_API_KEY"),
@@ -193,7 +204,12 @@ class Config(BaseSettings):
     brave_search_rate_limit: int = 60
 
     # VirusTotal
-    virustotal_enabled: bool = False
+    virustotal_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "MAILTRACE_VIRUSTOTAL_ENABLED", "VIRUSTOTAL_ENABLED"
+        ),
+    )
     virustotal_api_key: str | None = Field(
         default=None,
         validation_alias=AliasChoices("VIRUSTOTAL_API_KEY", "MAILTRACE_VIRUSTOTAL_API_KEY"),
@@ -203,13 +219,21 @@ class Config(BaseSettings):
     virustotal_rate_limit: int = 60
 
     # DNS
-    dns_enabled: bool = True
+    dns_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("MAILTRACE_DNS_ENABLED", "DNS_ENABLED"),
+    )
     dns_resolvers: list[str] = Field(default_factory=lambda: ["8.8.8.8", "1.1.1.1"])
     dns_timeout: float = 10.0
     dns_rate_limit: int = 60
 
     # BreachDirectory (RapidAPI)
-    breachdirectory_enabled: bool = False
+    breachdirectory_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "MAILTRACE_BREACHDIRECTORY_ENABLED", "BREACHDIRECTORY_ENABLED"
+        ),
+    )
     breachdirectory_api_key: str | None = Field(
         default=None,
         validation_alias=AliasChoices(
@@ -223,7 +247,12 @@ class Config(BaseSettings):
     breachdirectory_rate_limit: int = 60
 
     # emailrep.io
-    emailrep_enabled: bool = True  # Enabled by default - no API key required
+    emailrep_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "MAILTRACE_EMAILREP_ENABLED", "EMAILREP_ENABLED"
+        ),
+    )  # Enabled by default - no API key required
     emailrep_api_key: str | None = Field(
         default=None,
         validation_alias=AliasChoices("EMAILREP_API_KEY", "MAILTRACE_EMAILREP_API_KEY"),
