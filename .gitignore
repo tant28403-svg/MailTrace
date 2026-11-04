@@ -1,0 +1,48 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Type checking
+.mypy_cache/
+*.pyc
+
+# Ruff
+.ruff_cache/
+
+# MailTrace data
+data/
+*.db
+*.sqlite
+*.sqlite3
+logs/
+reports/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

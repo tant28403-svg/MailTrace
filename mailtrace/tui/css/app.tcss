@@ -1,0 +1,428 @@
+/* MailTrace TUI Styles */
+
+Screen {
+    background: $surface;
+}
+
+#main-container {
+    height: 1fr;
+    width: 1fr;
+}
+
+/* Welcome Screen */
+#welcome-container {
+    align: center middle;
+    width: 100%;
+    height: 100%;
+}
+
+#welcome-content {
+    width: 80%;
+    max-width: 80;
+    align: center middle;
+}
+
+#logo {
+    color: $primary;
+    text-align: center;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#tagline {
+    color: $text-muted;
+    text-align: center;
+    margin-bottom: 2;
+}
+
+#description {
+    text-align: center;
+    margin-bottom: 2;
+}
+
+#button-row {
+    layout: horizontal;
+    align: center middle;
+    width: 100%;
+}
+
+#button-row Button {
+    margin: 0 1;
+    min-width: 20;
+}
+
+/* Email Input Screen */
+#email-container {
+    align: center middle;
+    width: 100%;
+    height: 100%;
+}
+
+#email-content {
+    width: 60%;
+    max-width: 60;
+    align: center middle;
+}
+
+#screen-title {
+    text-align: center;
+    text-style: bold;
+    color: $primary;
+    margin-bottom: 1;
+}
+
+#instruction {
+    text-align: center;
+    color: $text-muted;
+    margin-bottom: 1;
+}
+
+#email-input {
+    margin-bottom: 1;
+}
+
+#validation-message {
+    color: $error;
+    text-align: center;
+    margin-bottom: 1;
+    height: auto;
+}
+
+#validation-message.error {
+    display: block;
+}
+
+/* Profile Select Screen */
+#profile-container {
+    align: center middle;
+    width: 100%;
+    height: 100%;
+}
+
+#profile-content {
+    width: 70%;
+    max-width: 80;
+    align: center middle;
+}
+
+#profile-radio {
+    margin: 1 0;
+    border: solid $primary;
+    padding: 1;
+}
+
+#profile-radio RadioButton {
+    margin: 0 1;
+}
+
+#profile-description {
+    color: $text-muted;
+    text-align: center;
+    margin-bottom: 1;
+    height: auto;
+}
+
+/* Auth Confirm Screen */
+#auth-container {
+    align: center middle;
+    width: 100%;
+    height: 100%;
+}
+
+#auth-content {
+    width: 70%;
+    max-width: 80;
+    align: center middle;
+}
+
+#provider-list {
+    background: $surface-darken-1;
+    padding: 1;
+    border: solid $primary;
+    margin: 1 0;
+}
+
+#target-display {
+    text-align: center;
+    color: $text-muted;
+    margin: 1 0;
+}
+
+#auth-checkbox {
+    margin: 1 0;
+}
+
+/* Provider Config Screen */
+#provider-container {
+    width: 100%;
+    height: 100%;
+}
+
+#provider-content {
+    padding: 1;
+}
+
+.provider-section {
+    border: solid $primary;
+    padding: 1;
+    margin: 1 0;
+}
+
+.provider-name {
+    text-style: bold;
+    color: $primary;
+}
+
+.provider-desc {
+    color: $text-muted;
+    margin-bottom: 1;
+}
+
+#provider-list {
+    height: 1fr;
+}
+
+/* Progress Screen */
+#progress-container {
+    width: 100%;
+    height: 100%;
+}
+
+#progress-content {
+    padding: 1;
+    height: 100%;
+}
+
+#inv-title {
+    text-style: bold;
+    color: $primary;
+    margin-bottom: 0;
+}
+
+#inv-profile {
+    color: $text-muted;
+    margin-bottom: 1;
+}
+
+#overall-progress {
+    margin-bottom: 1;
+}
+
+#providers-title {
+    text-style: bold;
+    margin-bottom: 0;
+}
+
+#provider-table {
+    height: auto;
+    max-height: 12;
+    margin-bottom: 1;
+}
+
+#log-title {
+    text-style: bold;
+    margin-bottom: 0;
+}
+
+#progress-log {
+    height: 1fr;
+    min-height: 5;
+    border: solid $primary;
+    background: $surface-darken-1;
+}
+
+/* Results Screen */
+#results-container {
+    width: 100%;
+    height: 100%;
+}
+
+#results-content {
+    padding: 1;
+    height: 100%;
+}
+
+#results-header {
+    layout: horizontal;
+    height: 3;
+    align: left middle;
+}
+
+#results-title {
+    text-style: bold;
+    color: $primary;
+}
+
+#results-summary {
+    color: $text-muted;
+    align: right middle;
+    width: 1fr;
+}
+
+/* Tabs */
+TabbedContent {
+    height: 1fr;
+}
+
+TabPane {
+    padding: 1;
+}
+
+/* Findings Table */
+#findings-table {
+    height: 1fr;
+}
+
+/* Evidence Panel */
+#evidence-content {
+    height: 1fr;
+}
+
+#evidence-placeholder {
+    text-align: center;
+    color: $text-muted;
+    padding: 2;
+}
+
+#evidence-tabs {
+    height: 1fr;
+}
+
+#evidence-table {
+    height: 1fr;
+}
+
+#evidence-details {
+    padding: 1;
+    overflow-y: auto;
+}
+
+/* History Screen */
+#history-container {
+    width: 100%;
+    height: 100%;
+}
+
+#history-content {
+    padding: 1;
+}
+
+#history-table {
+    height: 1fr;
+}
+
+#history-hint {
+    color: $text-muted;
+    text-align: center;
+    margin: 1 0;
+}
+
+/* Settings Screen */
+#settings-container {
+    width: 100%;
+    height: 100%;
+}
+
+#settings-content {
+    padding: 1;
+}
+
+#settings-scroll {
+    height: 1fr;
+}
+
+.section-title {
+    text-style: bold;
+    color: $primary;
+    margin: 1 0 0 0;
+}
+
+.setting-label {
+    width: 30;
+    content-align: right middle;
+    padding-right: 2;
+}
+
+#mask-row,
+#confirm-row,
+#log-level-row,
+#theme-row,
+#data-dir-row,
+#hibp-row,
+#github-row,
+#brave-row,
+#vt-row {
+    layout: horizontal;
+    height: 3;
+    align: left middle;
+    margin: 1 0;
+}
+
+/* Provider Badges */
+.provider-badge {
+    padding: 0 1;
+    margin: 0 1;
+    border: solid $primary;
+    min-width: 20;
+    content-align: center middle;
+}
+
+.provider-badge.success {
+    border: solid $success;
+    color: $success;
+}
+
+.provider-badge.warning {
+    border: solid $warning;
+    color: $warning;
+}
+
+.provider-badge.error {
+    border: solid $error;
+    color: $error;
+}
+
+.provider-badge.primary {
+    border: solid $primary;
+    color: $primary;
+}
+
+.provider-badge.default {
+    border: solid #888888;
+    color: #888888;
+}
+
+#help-container {
+    padding: 2;
+    overflow-y: auto;
+}
+
+/* Button Row */
+#button-row {
+    layout: horizontal;
+    align: center middle;
+    margin-top: 1;
+    height: auto;
+}
+
+#button-row Button {
+    margin: 0 1;
+    min-width: 16;
+}
+
+/* Focus styles */
+Input:focus,
+Select:focus,
+DataTable:focus,
+Button:focus {
+    border: solid $accent;
+}
+
+/* Scrollbar */
+Scrollbar {
+    background: $surface-darken-1;
+}
+
+Scrollbar:hover {
+    background: $surface-darken-2;
+}

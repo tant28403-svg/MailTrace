@@ -1,0 +1,63 @@
+# MailTrace Provider Configuration
+# Copy this to ~/.config/mailtrace/providers.toml and customize.
+#
+# Provider credentials are read from the process environment or a .env file
+# (see .env.example); this file configures non-secret provider behaviour.
+# General settings (data directory, masking, theme, log level) live in the
+# environment, for example MAILTRACE_GENERAL_DATA_DIR.
+
+[providers.hibp]
+# Have I Been Pwned breach database
+# Requires paid subscription: https://haveibeenpwned.com/API/Key
+enabled = true
+# api_key = ""  # Set via HIBP_API_KEY environment variable
+timeout = 30.0
+rate_limit = 60  # requests per minute
+
+[providers.github]
+# GitHub public repository metadata
+# Token: https://github.com/settings/tokens (public_repo scope)
+enabled = true
+# token = ""  # Set via GITHUB_TOKEN environment variable
+timeout = 30.0
+rate_limit = 30  # requests per minute (authenticated)
+
+[providers.brave_search]
+# Brave Search API for public web search
+# API key: https://brave.com/search/api/
+enabled = false
+# api_key = ""  # Set via BRAVE_API_KEY environment variable
+timeout = 30.0
+rate_limit = 20  # requests per minute
+
+[providers.virustotal]
+# VirusTotal domain/URL reputation
+# API key: https://www.virustotal.com/gui/my-apikey
+enabled = false
+# api_key = ""  # Set via VIRUSTOTAL_API_KEY environment variable
+timeout = 30.0
+rate_limit = 4  # requests per minute (free tier)
+
+[providers.dns]
+# Domain intelligence (DNS, MX, SPF, DMARC)
+# No API key required
+enabled = true
+timeout = 10.0
+resolvers = ["8.8.8.8", "1.1.1.1", "9.9.9.9"]
+
+[providers.breachdirectory]
+# BreachDirectory via RapidAPI
+# API key: https://rapidapi.com/breachdirectory/api/breachdirectory
+enabled = false
+# api_key = ""  # Set via BREACHDIRECTORY_API_KEY environment variable
+timeout = 30.0
+rate_limit = 60
+
+[providers.emailrep]
+# emailrep.io - Email reputation and breach intelligence
+# No API key required for basic usage
+# Optional key for higher limits: https://emailrep.io
+enabled = true
+# api_key = ""  # Set via EMAILREP_API_KEY environment variable (optional)
+timeout = 30.0
+rate_limit = 100  # ~1000/day free tier
