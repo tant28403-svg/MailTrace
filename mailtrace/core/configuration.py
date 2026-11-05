@@ -833,9 +833,7 @@ def _restrict_permissions(path: Path) -> None:
 def _merge_env_file(path: Path, updates: dict[str, str]) -> None:
     """Merge ``KEY=VALUE`` updates while preserving comments and other keys."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    existing_lines = (
-        path.read_text(encoding="utf-8-sig").splitlines() if path.is_file() else []
-    )
+    existing_lines = path.read_text(encoding="utf-8-sig").splitlines() if path.is_file() else []
     lines = list(existing_lines)
     if not lines:
         lines = [

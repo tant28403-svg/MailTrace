@@ -149,9 +149,7 @@ def test_bom_prefixed_project_env_is_detected_and_migrated(monkeypatch, tmp_path
     source = project / ".env"
     source.write_text(f"HIBP_API_KEY={SECRET}\n", encoding="utf-8-sig")
 
-    assert find_project_env_secrets(project) == {
-        "HIBP_API_KEY": fingerprint_secret(SECRET)
-    }
+    assert find_project_env_secrets(project) == {"HIBP_API_KEY": fingerprint_secret(SECRET)}
 
     result = migrate_project_keys(project)
 
