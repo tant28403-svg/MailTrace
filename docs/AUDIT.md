@@ -94,3 +94,29 @@ configuration.
 - PDF export requires the optional `report` extra and is not covered by tests.
 - Cross-platform package builds (PyInstaller) are described in the project
   plan but are not automated in CI.
+
+## Addendum: Credential Isolation (2026-11-05)
+
+The original configuration loader read a project-local `.env` first, which
+meant that copying or zipping the project folder also copied the maintainer's
+API keys. The following changes close that leak path and make the
+bring-your-own-key policy enforceable:
+
+- The default dotenv sources are now the process environment and
+  `~/.config/mailtrace/.env` only. Project `.env` loading requires an explicit
+  `MAILTRACE_USE_PROJECT_ENV=1` opt-in, and the per-user file always wins.
+- A `require_keys` setting (default `true`) blocks CLI and TUI investigations
+  until an enabled key-requiring provider has a credential. The orchestrator
+  enforces the same rule for direct Python callers.
+- `mailtrace config keys status` reports only source and a SHA-256 fingerprint.
+- `mailtrace config keys migrate` moves credentials to the per-user file,
+  writes a timestamped backup outside the project, preserves unrelated settings,
+  and strips the project copy.
+- `.gitignore` now covers `.env*` (except `.env.example`), key/certificate
+  extensions and backups. Pre-commit rejects staged `.env` files and runs
+  gitleaks; CI runs gitleaks over the full history.
+- `SECURITY.md` documents the policy and the response to a leaked key.
+
+Residual risk remains for anyone who can read the user's OS account or the
+per-user configuration file; that cannot be solved in application code. Use
+provider-side usage/spend limits as a second line of defense.

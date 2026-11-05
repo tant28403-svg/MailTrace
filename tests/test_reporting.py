@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from mailtrace.core.configuration import Config
 from mailtrace.reporting import ReportGenerator
 from mailtrace.schemas.finding import (
     Confidence,
@@ -78,9 +79,7 @@ def test_json_report_masks_target_by_default():
 
 
 def test_json_report_can_show_target_when_requested():
-    report = ReportGenerator(_build_investigation()).generate(
-        _options(mask_target=False)
-    )
+    report = ReportGenerator(_build_investigation()).generate(_options(mask_target=False))
     data = json.loads(report)
 
     assert data["investigation"]["target"] == RAW_EMAIL
@@ -102,9 +101,7 @@ def test_json_report_evidence_toggle():
 
 def test_csv_report_includes_target_column():
     investigation = _build_investigation()
-    report = ReportGenerator(investigation).generate(
-        _options(format=ExportFormat.CSV)
-    )
+    report = ReportGenerator(investigation).generate(_options(format=ExportFormat.CSV))
 
     header = report.splitlines()[0]
     assert header.startswith("Target,")
@@ -118,3 +115,21 @@ def test_terminal_report_does_not_duplicate_content():
 
     assert report.count("MailTrace Investigation Report") == 1
     assert "Email found in Example breach" in report
+
+
+def test_reports_never_include_configured_credentials():
+    """Provider keys are configuration, never investigation output."""
+    secret = "report-must-not-contain-this-key"
+    config = Config(_env_file=None, hibp_api_key=secret)
+    assert config.hibp_api_key == secret
+
+    investigation = _build_investigation()
+    for export_format in (
+        ExportFormat.JSON,
+        ExportFormat.CSV,
+        ExportFormat.TERMINAL,
+    ):
+        report = ReportGenerator(investigation).generate(_options(format=export_format))
+        if isinstance(report, bytes):
+            report = report.decode("utf-8", errors="replace")
+        assert secret not in report

@@ -410,6 +410,26 @@ TabPane {
     min-width: 16;
 }
 
+/* Setup Required Screen */
+#setup-container {
+    align: center middle;
+    width: 100%;
+    height: 100%;
+}
+
+#setup-content {
+    width: 80%;
+    max-width: 90;
+    align: center middle;
+}
+
+#setup-details {
+    text-align: left;
+    border: solid $warning;
+    padding: 1 2;
+    margin-bottom: 1;
+}
+
 /* Focus styles */
 Input:focus,
 Select:focus,

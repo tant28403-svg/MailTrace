@@ -14,7 +14,12 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from mailtrace.core.configuration import get_config
+from mailtrace.core.configuration import (
+    SETTINGS_ENV_FILE,
+    get_config,
+    iter_configured_keys,
+    migrate_project_keys,
+)
 from mailtrace.core.orchestrator import run_investigation as run_investigation_async
 from mailtrace.reporting import ReportGenerator
 from mailtrace.schemas.finding import (
@@ -61,6 +66,22 @@ def _authorize(prompt: str, no_confirm: bool) -> None:
     if not typer.confirm(prompt):
         console.print("[yellow]Cancelled[/yellow]")
         raise typer.Exit(0)
+
+
+def _require_api_keys() -> None:
+    """Block scans until the user has configured at least one provider key."""
+    if get_config().require_keys_satisfied():
+        return
+    console.print("[red]No API keys configured.[/red]")
+    console.print(
+        "MailTrace requires you to use your own provider keys; scans are disabled\n"
+        "until at least one key-requiring provider is configured."
+    )
+    console.print("\n[bold]Setup:[/bold]")
+    console.print(f"  1. Copy .env.example to {SETTINGS_ENV_FILE}")
+    console.print('  2. Add your own keys (see README "Bring your own API keys")')
+    console.print("  3. Check with: mailtrace config keys status")
+    raise typer.Exit(2)
 
 
 def _report_options(
@@ -182,31 +203,22 @@ def _provider_config(name: str) -> dict[str, Any]:
             "rate_limit": config.dns.rate_limit,
         },
     }
-    return {
-        key: value for key, value in configs.get(name, {}).items() if value is not None
-    }
+    return {key: value for key, value in configs.get(name, {}).items() if value is not None}
 
 
 # Scan command
 def scan(
     email: str = typer.Argument(..., help="Target email address"),
-    profile: Profile = typer.Option(
-        Profile.FULL, "--profile", "-p", help="Investigation profile"
-    ),
+    profile: Profile = typer.Option(Profile.FULL, "--profile", "-p", help="Investigation profile"),
     format: ExportFormat = typer.Option(
         ExportFormat.TERMINAL, "--format", "-f", help="Output format"
     ),
-    output: Path | None = typer.Option(
-        None, "--output", "-o", help="Output file path"
-    ),
-    no_confirm: bool = typer.Option(
-        False, "--no-confirm", help="Skip authorization confirmation"
-    ),
-    show_target: bool = typer.Option(
-        False, "--show-target", help="Show the full email in output"
-    ),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Output file path"),
+    no_confirm: bool = typer.Option(False, "--no-confirm", help="Skip authorization confirmation"),
+    show_target: bool = typer.Option(False, "--show-target", help="Show the full email in output"),
 ) -> None:
     """Run a full investigation on an email address."""
+    _require_api_keys()
     console.print("[bold]MailTrace Scan[/bold]")
     console.print(f"Target: {email if show_target else _mask_email(email)}")
     console.print(f"Profile: {profile.value}")
@@ -230,9 +242,7 @@ def scan(
 
 
 # Breach command
-breach_app = typer.Typer(
-    name="breach", help="Breach intelligence checks", add_completion=False
-)
+breach_app = typer.Typer(name="breach", help="Breach intelligence checks", add_completion=False)
 
 
 @breach_app.command("check")
@@ -241,25 +251,18 @@ def breach_check(
     format: ExportFormat = typer.Option(
         ExportFormat.TERMINAL, "--format", "-f", help="Output format"
     ),
-    output: Path | None = typer.Option(
-        None, "--output", "-o", help="Output file path"
-    ),
-    no_confirm: bool = typer.Option(
-        False, "--no-confirm", help="Skip authorization confirmation"
-    ),
-    show_target: bool = typer.Option(
-        False, "--show-target", help="Show the full email in output"
-    ),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Output file path"),
+    no_confirm: bool = typer.Option(False, "--no-confirm", help="Skip authorization confirmation"),
+    show_target: bool = typer.Option(False, "--show-target", help="Show the full email in output"),
 ) -> None:
     """Check an email against breach databases."""
+    _require_api_keys()
     console.print(f"[bold]Breach Check[/bold]: {_mask_email(email)}")
     _authorize("This will send the email to breach providers. Continue?", no_confirm)
 
     try:
         investigation = asyncio.run(
-            run_investigation_async(
-                email, Profile.BREACH, authorization_confirmed=True
-            )
+            run_investigation_async(email, Profile.BREACH, authorization_confirmed=True)
         )
     except Exception as exc:
         console.print(f"[red]Breach check failed:[/red] {exc}")
@@ -269,9 +272,7 @@ def breach_check(
 
 
 # Exposure command
-exposure_app = typer.Typer(
-    name="exposure", help="Public exposure searches", add_completion=False
-)
+exposure_app = typer.Typer(name="exposure", help="Public exposure searches", add_completion=False)
 
 
 @exposure_app.command("search")
@@ -280,17 +281,12 @@ def exposure_search(
     format: ExportFormat = typer.Option(
         ExportFormat.TERMINAL, "--format", "-f", help="Output format"
     ),
-    output: Path | None = typer.Option(
-        None, "--output", "-o", help="Output file path"
-    ),
-    no_confirm: bool = typer.Option(
-        False, "--no-confirm", help="Skip authorization confirmation"
-    ),
-    show_target: bool = typer.Option(
-        False, "--show-target", help="Show the full email in output"
-    ),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Output file path"),
+    no_confirm: bool = typer.Option(False, "--no-confirm", help="Skip authorization confirmation"),
+    show_target: bool = typer.Option(False, "--show-target", help="Show the full email in output"),
 ) -> None:
     """Search public indexes for email exposure."""
+    _require_api_keys()
     console.print(f"[bold]Exposure Search[/bold]: {_mask_email(email)}")
     _authorize(
         "This will send the email to public search providers. Continue?",
@@ -299,9 +295,7 @@ def exposure_search(
 
     try:
         investigation = asyncio.run(
-            run_investigation_async(
-                email, Profile.PUBLIC, authorization_confirmed=True
-            )
+            run_investigation_async(email, Profile.PUBLIC, authorization_confirmed=True)
         )
     except Exception as exc:
         console.print(f"[red]Exposure search failed:[/red] {exc}")
@@ -311,9 +305,7 @@ def exposure_search(
 
 
 # Domain command
-domain_app = typer.Typer(
-    name="domain", help="Domain intelligence", add_completion=False
-)
+domain_app = typer.Typer(name="domain", help="Domain intelligence", add_completion=False)
 
 
 @domain_app.command("inspect")
@@ -322,14 +314,11 @@ def domain_inspect(
     format: ExportFormat = typer.Option(
         ExportFormat.TERMINAL, "--format", "-f", help="Output format"
     ),
-    output: Path | None = typer.Option(
-        None, "--output", "-o", help="Output file path"
-    ),
-    no_confirm: bool = typer.Option(
-        False, "--no-confirm", help="Skip authorization confirmation"
-    ),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Output file path"),
+    no_confirm: bool = typer.Option(False, "--no-confirm", help="Skip authorization confirmation"),
 ) -> None:
     """Inspect domain DNS records and reputation."""
+    _require_api_keys()
     normalized_domain = _normalize_domain(domain)
     console.print(f"[bold]Domain Inspection[/bold]: {normalized_domain}")
     _authorize(
@@ -343,9 +332,7 @@ def domain_inspect(
 
     try:
         investigation = asyncio.run(
-            run_investigation_async(
-                email, Profile.DOMAIN, authorization_confirmed=True
-            )
+            run_investigation_async(email, Profile.DOMAIN, authorization_confirmed=True)
         )
     except Exception as exc:
         console.print(f"[red]Domain inspection failed:[/red] {exc}")
@@ -355,9 +342,7 @@ def domain_inspect(
 
 
 # Sources command
-sources_app = typer.Typer(
-    name="sources", help="Manage and test sources", add_completion=False
-)
+sources_app = typer.Typer(name="sources", help="Manage and test sources", add_completion=False)
 
 
 @sources_app.command("list")
@@ -479,9 +464,7 @@ def sources_test(
 
 
 # History command
-history_app = typer.Typer(
-    name="history", help="Investigation history", add_completion=False
-)
+history_app = typer.Typer(name="history", help="Investigation history", add_completion=False)
 
 
 @history_app.command("list")
@@ -512,9 +495,7 @@ def history_list(
                 table.add_column("ID")
 
                 for investigation in investigations:
-                    finding_count = await finding_repo.count_by_investigation(
-                        investigation.id
-                    )
+                    finding_count = await finding_repo.count_by_investigation(investigation.id)
                     table.add_row(
                         investigation.created_at.strftime("%Y-%m-%d %H:%M"),
                         investigation.target_masked,
@@ -573,9 +554,7 @@ def history_compare(
         added = second_findings - first_findings
         removed = first_findings - second_findings
 
-        console.print(
-            f"[bold]Comparing[/bold] {str(first.id)[:8]} vs {str(second.id)[:8]}"
-        )
+        console.print(f"[bold]Comparing[/bold] {str(first.id)[:8]} vs {str(second.id)[:8]}")
         console.print(
             f"Findings: {len(first.findings)} → {len(second.findings)} "
             f"({len(added)} added, {len(removed)} removed)"
@@ -613,9 +592,10 @@ def case_show(
     ),
 ) -> None:
     """Show case details."""
-    _require_case(case_id, lambda investigation: _write_report(
-        investigation, format, None, show_target=show_target
-    ))
+    _require_case(
+        case_id,
+        lambda investigation: _write_report(investigation, format, None, show_target=show_target),
+    )
 
 
 @case_app.command("delete")
@@ -640,9 +620,7 @@ def case_delete(
         await init_database(data_dir=config.general.data_dir)
         try:
             async with get_database_manager().session() as session:
-                deleted = await InvestigationRepository(session).delete(
-                    investigation_id
-                )
+                deleted = await InvestigationRepository(session).delete(investigation_id)
         finally:
             await close_database()
 
@@ -668,9 +646,7 @@ def _require_case(case_id: str, callback: Callable[[Investigation], None]) -> No
         await init_database(data_dir=config.general.data_dir)
         try:
             async with get_database_manager().session() as session:
-                investigation = await InvestigationRepository(session).get_schema(
-                    investigation_id
-                )
+                investigation = await InvestigationRepository(session).get_schema(investigation_id)
         finally:
             await close_database()
         return investigation
@@ -688,15 +664,11 @@ def report(
     format: ExportFormat = typer.Option(
         ExportFormat.TERMINAL, "--format", "-f", help="Output format"
     ),
-    output: Path | None = typer.Option(
-        None, "--output", "-o", help="Output file path"
-    ),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Output file path"),
     include_evidence: bool = typer.Option(
         True, "--evidence/--no-evidence", help="Include evidence"
     ),
-    mask_target: bool = typer.Option(
-        True, "--mask/--show-target", help="Mask the target email"
-    ),
+    mask_target: bool = typer.Option(True, "--mask/--show-target", help="Mask the target email"),
 ) -> None:
     """Generate a report for a case."""
     _require_case(
@@ -712,9 +684,110 @@ def report(
 
 
 # Config command
-config_app = typer.Typer(
-    name="config", help="Configuration management", add_completion=False
-)
+config_app = typer.Typer(name="config", help="Configuration management", add_completion=False)
+keys_app = typer.Typer(name="keys", help="Manage personal provider API keys", add_completion=False)
+
+
+@keys_app.command("status")
+def config_keys_status() -> None:
+    """Show where each provider key comes from, without revealing it."""
+    config = get_config()
+    table = Table(title="Provider API Keys")
+    table.add_column("Provider")
+    table.add_column("Enabled")
+    table.add_column("Fingerprint")
+    table.add_column("Source")
+    table.add_column("Status")
+
+    for status in iter_configured_keys(config):
+        if not status.requires_key:
+            fingerprint = "-"
+            state = "Ready" if status.enabled else "Disabled"
+        elif status.configured:
+            fingerprint = status.fingerprint or "-"
+            state = "Ready" if status.enabled else "Key set (disabled)"
+        elif status.source == "project .env (ignored)":
+            fingerprint = status.fingerprint or "-"
+            state = "Ignored - move to user config"
+        else:
+            fingerprint = "-"
+            state = "Missing key"
+        table.add_row(
+            status.label,
+            "Yes" if status.enabled else "No",
+            fingerprint,
+            status.source,
+            state,
+        )
+
+    console.print(table)
+    if not config.require_keys_satisfied():
+        console.print(
+            "\n[yellow]Scans are disabled until at least one enabled provider "
+            "has its own key.[/yellow]"
+        )
+        console.print(f"Add keys to {SETTINGS_ENV_FILE} or run `mailtrace config keys migrate`.")
+
+
+@keys_app.command("migrate")
+def config_keys_migrate(
+    project_dir: Path = typer.Option(
+        Path.cwd(),
+        "--project-dir",
+        help="Directory containing the project .env to migrate",
+    ),
+    all_settings: bool = typer.Option(
+        False,
+        "--all",
+        help="Also move recognized non-secret MailTrace settings",
+    ),
+) -> None:
+    """Move project-local keys into the per-user configuration."""
+    try:
+        result = migrate_project_keys(project_dir, include_all=all_settings)
+    except (FileNotFoundError, OSError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
+
+    if not result.moved and not result.destination_overrides:
+        console.print("[yellow]No project .env credentials found; nothing to move.[/yellow]")
+        return
+
+    if result.moved:
+        console.print(
+            f"[green]Moved {len(result.moved)} setting(s) to {result.destination}[/green]"
+        )
+        for name in result.moved:
+            fingerprint = result.fingerprints.get(name)
+            suffix = f": {fingerprint}" if fingerprint else ""
+            console.print(f"  {name}{suffix}")
+    if result.destination_overrides:
+        console.print(
+            "[yellow]Already configured in the per-user file (project copies removed):[/yellow]"
+        )
+        for name in result.destination_overrides:
+            console.print(f"  {name}")
+
+    if result.backup:
+        console.print(f"Backup written to {result.backup}")
+    if result.leftover:
+        console.print(
+            "[yellow]Recognized settings left in the project .env "
+            "(use --all to move them):[/yellow]"
+        )
+        for name in sorted(set(result.leftover)):
+            console.print(f"  {name}")
+    if result.unrecognized:
+        console.print("[yellow]Left in the project .env (unrecognized keys):[/yellow]")
+        for name in sorted(set(result.unrecognized)):
+            console.print(f"  {name}")
+    console.print(
+        "\n[green]Done.[/green] Verify with `mailtrace config keys status`. "
+        "You can delete the project .env once it contains no settings you need."
+    )
+
+
+config_app.add_typer(keys_app, name="keys")
 
 
 @config_app.command("show")
@@ -727,10 +800,11 @@ def config_show() -> None:
     console.print(f"Confirm external: {config.general.confirm_external}")
     console.print(f"Log level: {config.general.log_level}")
     console.print(f"Theme: {config.general.theme}")
+    console.print(f"Require API keys: {config.general.require_keys}")
+    console.print(f"User config: {SETTINGS_ENV_FILE}")
     console.print("\n[bold]Providers:[/bold]")
     console.print(
-        f"  HIBP: enabled={config.hibp.enabled}, "
-        f"key={'set' if config.hibp.api_key else 'not set'}"
+        f"  HIBP: enabled={config.hibp.enabled}, key={'set' if config.hibp.api_key else 'not set'}"
     )
     console.print(
         f"  BreachDirectory: enabled={config.breachdirectory.enabled}, "
@@ -774,8 +848,12 @@ def config_setup() -> None:
     """Show configuration instructions."""
     console.print("[bold]MailTrace Configuration Setup[/bold]")
     console.print(
-        "Copy [cyan].env.example[/cyan] to [cyan].env[/cyan] and fill in your keys, "
-        "or export the variables below."
+        "MailTrace never uses bundled credentials. Copy [cyan].env.example[/cyan] "
+        f"to [cyan]{SETTINGS_ENV_FILE}[/cyan] and add your own keys."
+    )
+    console.print(
+        "\nDo not put keys in the project folder: a project-local .env is ignored "
+        "unless MAILTRACE_USE_PROJECT_ENV=1 is set."
     )
     console.print("\nEnvironment variables:")
     console.print("  HIBP_API_KEY=your_key")
@@ -788,10 +866,11 @@ def config_setup() -> None:
     console.print("  MAILTRACE_GENERAL_DATA_DIR=~/.local/share/mailtrace")
     console.print("  MAILTRACE_GENERAL_MASK_OUTPUT=true")
     console.print("  MAILTRACE_GENERAL_CONFIRM_EXTERNAL=true")
+    console.print("  MAILTRACE_GENERAL_REQUIRE_KEYS=true")
     console.print(
-        "\nProvider TOML: copy config/providers.example.toml to "
-        "~/.config/mailtrace/providers.toml"
+        "\nProvider TOML: copy config/providers.example.toml to ~/.config/mailtrace/providers.toml"
     )
+    console.print("\nCheck your setup with: mailtrace config keys status")
 
 
 # Export all subcommand apps

@@ -1,10 +1,12 @@
 # MailTrace Provider Configuration
 # Copy this to ~/.config/mailtrace/providers.toml and customize.
 #
-# Provider credentials are read from the process environment or a .env file
-# (see .env.example); this file configures non-secret provider behaviour.
+# Use your own provider credentials. They are read from the process environment
+# or the per-user ~/.config/mailtrace/.env file (see .env.example); this file
+# configures non-secret provider behaviour. A project-local .env is ignored by
+# default and must never be shared or committed.
 # General settings (data directory, masking, theme, log level) live in the
-# environment, for example MAILTRACE_GENERAL_DATA_DIR.
+# per-user environment file, for example MAILTRACE_GENERAL_DATA_DIR.
 
 [providers.hibp]
 # Have I Been Pwned breach database

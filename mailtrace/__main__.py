@@ -16,6 +16,7 @@ from mailtrace.cli import (
     scan,
     sources_app,
 )
+from mailtrace.core.configuration import project_env_warning
 from mailtrace.tui.app import MailTraceApp
 
 console = Console()
@@ -40,6 +41,9 @@ app.add_typer(config_app, name="config")
 
 def cli_main() -> None:
     """Entry point for console script."""
+    warning = project_env_warning()
+    if warning:
+        console.print(f"[yellow]{warning}[/yellow]")
     # Check if any args provided
     if len(sys.argv) == 1:
         # No args - launch TUI
@@ -56,6 +60,7 @@ def cli_main() -> None:
         # Handle --version before subcommand parsing
         if "--version" in sys.argv or "-v" in sys.argv:
             from mailtrace import __version__
+
             console.print(f"MailTrace v{__version__}")
             sys.exit(0)
         app()

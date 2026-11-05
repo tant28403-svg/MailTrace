@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
+import shutil
 import tomllib
-from dataclasses import dataclass
+from contextlib import suppress
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -22,7 +26,169 @@ PROVIDERS_FILE = Path(
 ).expanduser()
 
 
-class GeneralConfig(BaseSettings):
+@dataclass(frozen=True)
+class ProviderKeySpec:
+    """Metadata describing a provider credential."""
+
+    provider: str
+    label: str
+    enabled_attr: str
+    key_attr: str
+    key_aliases: tuple[str, ...]
+    toml_key: str | None = None
+    requires_key: bool = True
+
+
+#: Provider metadata used by the key gate, status output and migration helper.
+#: Keeping this in one place prevents the CLI, TUI and orchestrator from
+#: disagreeing about which providers require credentials.
+PROVIDER_KEY_SPECS: tuple[ProviderKeySpec, ...] = (
+    ProviderKeySpec(
+        provider="hibp",
+        label="HIBP",
+        enabled_attr="hibp_enabled",
+        key_attr="hibp_api_key",
+        key_aliases=("HIBP_API_KEY", "MAILTRACE_HIBP_API_KEY"),
+        toml_key="hibp_api_key",
+    ),
+    ProviderKeySpec(
+        provider="breachdirectory",
+        label="BreachDirectory",
+        enabled_attr="breachdirectory_enabled",
+        key_attr="breachdirectory_api_key",
+        key_aliases=(
+            "BREACHDIRECTORY_API_KEY",
+            "MAILTRACE_BREACHDIRECTORY_API_KEY",
+        ),
+        toml_key="breachdirectory_api_key",
+    ),
+    ProviderKeySpec(
+        provider="github",
+        label="GitHub",
+        enabled_attr="github_enabled",
+        key_attr="github_token",
+        key_aliases=("GITHUB_TOKEN", "MAILTRACE_GITHUB_TOKEN"),
+        toml_key="github_token",
+    ),
+    ProviderKeySpec(
+        provider="brave_search",
+        label="Brave Search",
+        enabled_attr="brave_search_enabled",
+        key_attr="brave_search_api_key",
+        key_aliases=("BRAVE_API_KEY", "MAILTRACE_BRAVE_API_KEY"),
+        toml_key="brave_search_api_key",
+    ),
+    ProviderKeySpec(
+        provider="virustotal",
+        label="VirusTotal",
+        enabled_attr="virustotal_enabled",
+        key_attr="virustotal_api_key",
+        key_aliases=("VIRUSTOTAL_API_KEY", "MAILTRACE_VIRUSTOTAL_API_KEY"),
+        toml_key="virustotal_api_key",
+    ),
+    ProviderKeySpec(
+        provider="emailrep",
+        label="emailrep.io",
+        enabled_attr="emailrep_enabled",
+        key_attr="emailrep_api_key",
+        key_aliases=("EMAILREP_API_KEY", "MAILTRACE_EMAILREP_API_KEY"),
+        toml_key="emailrep_api_key",
+        requires_key=False,
+    ),
+    ProviderKeySpec(
+        provider="dns",
+        label="DNS",
+        enabled_attr="dns_enabled",
+        key_attr="",
+        key_aliases=(),
+        requires_key=False,
+    ),
+)
+
+PROJECT_ENV_OPT_IN = "MAILTRACE_USE_PROJECT_ENV"
+
+SECRET_ENV_NAMES: frozenset[str] = frozenset(
+    alias for spec in PROVIDER_KEY_SPECS for alias in spec.key_aliases
+)
+
+#: Recognised non-secret settings that ``config keys migrate --all`` may move.
+RECOGNIZED_SETTING_NAMES: frozenset[str] = frozenset(
+    {
+        "MAILTRACE_GENERAL_DATA_DIR",
+        "MAILTRACE_DATA_DIR",
+        "MAILTRACE_GENERAL_MASK_OUTPUT",
+        "MAILTRACE_MASK_OUTPUT",
+        "MAILTRACE_GENERAL_CONFIRM_EXTERNAL",
+        "MAILTRACE_CONFIRM_EXTERNAL",
+        "MAILTRACE_GENERAL_LOG_LEVEL",
+        "MAILTRACE_LOG_LEVEL",
+        "MAILTRACE_GENERAL_THEME",
+        "MAILTRACE_THEME",
+        "MAILTRACE_GENERAL_REQUIRE_KEYS",
+        "MAILTRACE_REQUIRE_KEYS",
+        "MAILTRACE_HIBP_ENABLED",
+        "HIBP_ENABLED",
+        "MAILTRACE_BREACHDIRECTORY_ENABLED",
+        "BREACHDIRECTORY_ENABLED",
+        "MAILTRACE_EMAILREP_ENABLED",
+        "EMAILREP_ENABLED",
+        "MAILTRACE_GITHUB_ENABLED",
+        "GITHUB_ENABLED",
+        "MAILTRACE_BRAVE_SEARCH_ENABLED",
+        "BRAVE_SEARCH_ENABLED",
+        "MAILTRACE_VIRUSTOTAL_ENABLED",
+        "VIRUSTOTAL_ENABLED",
+        "MAILTRACE_DNS_ENABLED",
+        "DNS_ENABLED",
+    }
+)
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def use_project_env() -> bool:
+    """Return whether the project-local ``.env`` is explicitly enabled."""
+    return _env_flag(PROJECT_ENV_OPT_IN)
+
+
+def project_env_path() -> Path:
+    """Return the project-local ``.env`` path resolved at call time."""
+    return Path.cwd() / ".env"
+
+
+def _default_env_files() -> list[Path]:
+    """Build the default dotenv source list.
+
+    The per-user file is intentionally the only default source.  A project
+    ``.env`` can be opted into for development, but it is loaded first so the
+    per-user file always wins when both define the same key.
+    """
+    files: list[Path] = []
+    if use_project_env():
+        project_env = project_env_path()
+        if project_env.is_file():
+            files.append(project_env)
+    if SETTINGS_ENV_FILE.is_file():
+        files.append(SETTINGS_ENV_FILE)
+    return files
+
+
+class _MailTraceSettings(BaseSettings):
+    """Settings base class that resolves dotenv files at construction time."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        if "_env_file" not in kwargs:
+            env_files = _default_env_files()
+            kwargs["_env_file"] = env_files or None
+        super().__init__(**kwargs)
+
+
+class GeneralConfig(_MailTraceSettings):
     """General application settings.
 
     Both ``MAILTRACE_DATA_DIR`` and the nested
@@ -32,7 +198,6 @@ class GeneralConfig(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="MAILTRACE_",
-        env_file=(str(Path.cwd() / ".env"), str(SETTINGS_ENV_FILE)),
         env_file_encoding="utf-8",
         extra="ignore",
         populate_by_name=True,
@@ -76,6 +241,14 @@ class GeneralConfig(BaseSettings):
             "MAILTRACE_GENERAL_THEME",
             "MAILTRACE_THEME",
             "theme",
+        ),
+    )
+    require_keys: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "MAILTRACE_GENERAL_REQUIRE_KEYS",
+            "MAILTRACE_REQUIRE_KEYS",
+            "require_keys",
         ),
     )
 
@@ -148,12 +321,11 @@ class MailTraceTomlSettingsSource(PydanticBaseSettingsSource):
         return self._load()
 
 
-class Config(BaseSettings):
+class Config(_MailTraceSettings):
     """Main configuration container - flat structure with all provider settings."""
 
     model_config = SettingsConfigDict(
         env_prefix="MAILTRACE_",
-        env_file=(str(Path.cwd() / ".env"), str(SETTINGS_ENV_FILE)),
         env_file_encoding="utf-8",
         extra="ignore",
         populate_by_name=True,
@@ -191,9 +363,7 @@ class Config(BaseSettings):
     # Brave Search
     brave_search_enabled: bool = Field(
         default=False,
-        validation_alias=AliasChoices(
-            "MAILTRACE_BRAVE_SEARCH_ENABLED", "BRAVE_SEARCH_ENABLED"
-        ),
+        validation_alias=AliasChoices("MAILTRACE_BRAVE_SEARCH_ENABLED", "BRAVE_SEARCH_ENABLED"),
     )
     brave_search_api_key: str | None = Field(
         default=None,
@@ -206,9 +376,7 @@ class Config(BaseSettings):
     # VirusTotal
     virustotal_enabled: bool = Field(
         default=False,
-        validation_alias=AliasChoices(
-            "MAILTRACE_VIRUSTOTAL_ENABLED", "VIRUSTOTAL_ENABLED"
-        ),
+        validation_alias=AliasChoices("MAILTRACE_VIRUSTOTAL_ENABLED", "VIRUSTOTAL_ENABLED"),
     )
     virustotal_api_key: str | None = Field(
         default=None,
@@ -249,9 +417,7 @@ class Config(BaseSettings):
     # emailrep.io
     emailrep_enabled: bool = Field(
         default=True,
-        validation_alias=AliasChoices(
-            "MAILTRACE_EMAILREP_ENABLED", "EMAILREP_ENABLED"
-        ),
+        validation_alias=AliasChoices("MAILTRACE_EMAILREP_ENABLED", "EMAILREP_ENABLED"),
     )  # Enabled by default - no API key required
     emailrep_api_key: str | None = Field(
         default=None,
@@ -298,6 +464,19 @@ class Config(BaseSettings):
         if self.dns_enabled:
             enabled.append("dns")
         return enabled
+
+    def require_keys_satisfied(self) -> bool:
+        """Return whether at least one enabled, key-requiring provider is usable.
+
+        MailTrace is designed so a person who obtains the project cannot run
+        investigations on someone else's provider credentials.  Scans are
+        gated until the user configures their own key.  Setting
+        ``MAILTRACE_GENERAL_REQUIRE_KEYS=false`` restores keyless DNS/emailrep
+        runs for development or explicitly accepted use.
+        """
+        if not self.general.require_keys:
+            return True
+        return any(status.ready for status in iter_configured_keys(self) if status.requires_key)
 
     def configure_errors(self) -> dict[str, str]:
         """Return configuration errors for enabled providers without credentials."""
@@ -453,6 +632,324 @@ class EmailRepConfig:
     rate_limit: int
 
 
+@dataclass(frozen=True)
+class ProviderKeyStatus:
+    """Effective credential status for one provider."""
+
+    provider: str
+    label: str
+    enabled: bool
+    requires_key: bool
+    configured: bool
+    source: str
+    fingerprint: str | None = None
+
+    @property
+    def ready(self) -> bool:
+        """Return whether the provider can run with the current settings."""
+        return self.enabled and (not self.requires_key or self.configured)
+
+
+@dataclass
+class KeyMigrationResult:
+    """Outcome of moving project-local credentials to the per-user file.
+
+    Only names and fingerprints are reported; credential values are never
+    exposed by the migration API.
+    """
+
+    source: Path
+    destination: Path
+    backup: Path | None = None
+    moved: list[str] = field(default_factory=list)
+    destination_overrides: list[str] = field(default_factory=list)
+    leftover: list[str] = field(default_factory=list)
+    unrecognized: list[str] = field(default_factory=list)
+    fingerprints: dict[str, str] = field(default_factory=dict)
+
+
+def fingerprint_secret(value: str) -> str:
+    """Return a short, stable fingerprint that does not reveal the secret."""
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:10]
+
+
+def _read_env_file(path: Path) -> dict[str, str]:
+    """Read simple ``KEY=VALUE`` pairs without ever logging their values."""
+    if not path.is_file():
+        return {}
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except OSError:
+        return {}
+    values: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        key, separator, value = line.partition("=")
+        if not separator:
+            continue
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        if key:
+            values[key] = value
+    return values
+
+
+def _read_toml_settings() -> dict[str, Any]:
+    if not PROVIDERS_FILE.is_file():
+        return {}
+    try:
+        with PROVIDERS_FILE.open("rb") as handle:
+            raw = tomllib.load(handle)
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
+    return _flatten_provider_toml(raw)
+
+
+def _detect_key_source(
+    spec: ProviderKeySpec,
+    process_env: dict[str, str],
+    user_env: dict[str, str],
+    project_env: dict[str, str],
+    toml_settings: dict[str, Any],
+) -> tuple[str, str | None]:
+    """Find where a credential came from, following the load precedence."""
+    for name in spec.key_aliases:
+        value = process_env.get(name.upper(), "").strip()
+        if value:
+            return "process environment", value
+    for name in spec.key_aliases:
+        value = user_env.get(name, "").strip()
+        if value:
+            return "user .env", value
+    for name in spec.key_aliases:
+        value = project_env.get(name, "").strip()
+        if value:
+            if use_project_env():
+                return "project .env", value
+            return "project .env (ignored)", value
+    if spec.toml_key:
+        value = str(toml_settings.get(spec.toml_key) or "").strip()
+        if value:
+            return "providers.toml", value
+    return "none", None
+
+
+def iter_configured_keys(config: Config | None = None) -> list[ProviderKeyStatus]:
+    """Return credential status for every known provider.
+
+    Values are represented only by a short SHA-256 fingerprint.  If a project
+    ``.env`` is ignored, its credential is still fingerprinted so the user can
+    identify which key needs to be moved, but it is not marked configured.
+    """
+    settings = config or get_config()
+    process_env = {name.upper(): value for name, value in os.environ.items()}
+    user_env = _read_env_file(SETTINGS_ENV_FILE)
+    project_env = _read_env_file(project_env_path())
+    toml_settings = _read_toml_settings()
+
+    statuses: list[ProviderKeyStatus] = []
+    for spec in PROVIDER_KEY_SPECS:
+        enabled = bool(getattr(settings, spec.enabled_attr))
+        if not spec.requires_key:
+            statuses.append(
+                ProviderKeyStatus(
+                    provider=spec.provider,
+                    label=spec.label,
+                    enabled=enabled,
+                    requires_key=False,
+                    configured=True,
+                    source="not required",
+                )
+            )
+            continue
+
+        configured_value = getattr(settings, spec.key_attr, None)
+        configured_value = (
+            configured_value.strip() if isinstance(configured_value, str) else configured_value
+        )
+        source, source_value = _detect_key_source(
+            spec, process_env, user_env, project_env, toml_settings
+        )
+        if configured_value and source == "none":
+            source = "explicit"
+            source_value = str(configured_value)
+        fingerprint = (
+            fingerprint_secret(str(source_value or configured_value))
+            if (source_value or configured_value)
+            else None
+        )
+        statuses.append(
+            ProviderKeyStatus(
+                provider=spec.provider,
+                label=spec.label,
+                enabled=enabled,
+                requires_key=True,
+                configured=bool(configured_value),
+                source=source,
+                fingerprint=fingerprint,
+            )
+        )
+    return statuses
+
+
+def find_project_env_secrets(project_dir: Path | None = None) -> dict[str, str]:
+    """Return known credential names and fingerprints found in a project .env."""
+    path = (project_dir or Path.cwd()) / ".env"
+    values = _read_env_file(path)
+    secrets: dict[str, str] = {}
+    for name, value in values.items():
+        if name.upper() in SECRET_ENV_NAMES and value.strip():
+            secrets[name] = fingerprint_secret(value)
+    return secrets
+
+
+def project_env_warning() -> str | None:
+    """Return a warning when an ignored project .env still contains keys."""
+    if use_project_env():
+        return None
+    secrets = find_project_env_secrets()
+    if not secrets:
+        return None
+    names = ", ".join(sorted(secrets))
+    return (
+        f"Keys found in ./.env are ignored ({names}). Move them to "
+        f"{SETTINGS_ENV_FILE} - this project folder may be shared. "
+        "Run `mailtrace config keys migrate`."
+    )
+
+
+def _restrict_permissions(path: Path) -> None:
+    """Make a credential file private where the platform supports it."""
+    with suppress(OSError):
+        path.chmod(0o600)
+
+
+def _merge_env_file(path: Path, updates: dict[str, str]) -> None:
+    """Merge ``KEY=VALUE`` updates while preserving comments and other keys."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing_lines = (
+        path.read_text(encoding="utf-8-sig").splitlines() if path.is_file() else []
+    )
+    lines = list(existing_lines)
+    if not lines:
+        lines = [
+            "# MailTrace settings. Keep this file private.",
+            "# Environment variables take precedence over values in this file.",
+            "",
+        ]
+
+    seen: set[str] = set()
+    for index, raw in enumerate(lines):
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, _ = stripped.partition("=")
+        key = key.strip()
+        if key in updates:
+            lines[index] = f"{key}={updates[key]}"
+            seen.add(key)
+
+    for key, value in updates.items():
+        if key not in seen:
+            lines.append(f"{key}={value}")
+
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _restrict_permissions(path)
+
+
+def migrate_project_keys(
+    project_dir: Path | None = None,
+    *,
+    include_all: bool = False,
+) -> KeyMigrationResult:
+    """Move project-local credentials into the per-user env file.
+
+    A timestamped backup of the destination file is written next to it (not in
+    the project folder) so the migration never re-introduces secrets into a
+    directory that may be shared or committed.  Existing destination values win
+    over project values; the project line is still removed.
+    """
+    source = (project_dir or Path.cwd()) / ".env"
+    destination = SETTINGS_ENV_FILE
+    result = KeyMigrationResult(source=source, destination=destination)
+    if not source.is_file():
+        raise FileNotFoundError(f"No project .env found at {source}")
+
+    destination_values = _read_env_file(destination)
+    destination_upper = {key.upper(): value for key, value in destination_values.items()}
+
+    updates: dict[str, str] = {}
+    remaining_lines: list[str] = []
+    for raw in source.read_text(encoding="utf-8-sig").splitlines():
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            remaining_lines.append(raw)
+            continue
+        candidate = stripped[7:].lstrip() if stripped.startswith("export ") else stripped
+        key, separator, value = candidate.partition("=")
+        name = key.strip()
+        if not separator or not name:
+            remaining_lines.append(raw)
+            continue
+        upper = name.upper()
+        recognized = upper in SECRET_ENV_NAMES or (
+            include_all and upper in RECOGNIZED_SETTING_NAMES
+        )
+        if not recognized:
+            if value.strip():
+                if upper in RECOGNIZED_SETTING_NAMES:
+                    result.leftover.append(name)
+                else:
+                    result.unrecognized.append(name)
+            remaining_lines.append(raw)
+            continue
+        if not value.strip():
+            remaining_lines.append(raw)
+            continue
+
+        if destination_upper.get(upper):
+            result.destination_overrides.append(name)
+        else:
+            updates[name] = value.strip()
+            destination_upper[upper] = value.strip()
+            result.moved.append(name)
+            if upper in SECRET_ENV_NAMES:
+                result.fingerprints[name] = fingerprint_secret(value.strip())
+
+    if not result.moved and not result.destination_overrides:
+        return result
+
+    if destination.is_file():
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        backup = destination.parent / f".env.backup-{timestamp}"
+        suffix = 1
+        while backup.exists():
+            backup = destination.parent / f".env.backup-{timestamp}-{suffix}"
+            suffix += 1
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(destination, backup)
+        _restrict_permissions(backup)
+        result.backup = backup
+    if updates:
+        _merge_env_file(destination, updates)
+
+    if any(line.strip() and not line.strip().startswith("#") for line in remaining_lines):
+        source.write_text("\n".join(remaining_lines) + "\n", encoding="utf-8")
+    else:
+        source.write_text(
+            "# API keys were moved to the per-user MailTrace configuration.\n"
+            "# This file no longer contains credentials and can be deleted.\n",
+            encoding="utf-8",
+        )
+    return result
+
+
 # Global config instance
 _config: Config | None = None
 
@@ -475,8 +972,9 @@ def reload_config() -> Config:
 def save_general_settings(updates: dict[str, Any]) -> Path:
     """Persist general settings to ``~/.config/mailtrace/.env``.
 
-    Only non-secret general settings are written.  API keys must be supplied
-    through the process environment or the project ``.env`` file.
+    Only non-secret settings are written.  Credentials belong in the same
+    per-user file (or the process environment) and are never added here by this
+    function.  Existing keys and comments are preserved.
     """
     key_map = {
         "data_dir": "MAILTRACE_GENERAL_DATA_DIR",
@@ -484,6 +982,7 @@ def save_general_settings(updates: dict[str, Any]) -> Path:
         "confirm_external": "MAILTRACE_GENERAL_CONFIRM_EXTERNAL",
         "log_level": "MAILTRACE_GENERAL_LOG_LEVEL",
         "theme": "MAILTRACE_GENERAL_THEME",
+        "require_keys": "MAILTRACE_GENERAL_REQUIRE_KEYS",
         "hibp_enabled": "MAILTRACE_HIBP_ENABLED",
         "breachdirectory_enabled": "MAILTRACE_BREACHDIRECTORY_ENABLED",
         "emailrep_enabled": "MAILTRACE_EMAILREP_ENABLED",
@@ -496,27 +995,13 @@ def save_general_settings(updates: dict[str, Any]) -> Path:
     if unknown:
         raise ValueError(f"Unsupported settings: {', '.join(sorted(unknown))}")
 
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    existing: dict[str, str] = {}
-    if SETTINGS_ENV_FILE.is_file():
-        for line in SETTINGS_ENV_FILE.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#") or "=" not in stripped:
-                continue
-            key, _, value = stripped.partition("=")
-            existing[key.strip()] = value.strip()
-
+    rendered: dict[str, str] = {}
     for key, value in updates.items():
-        env_key = key_map[key]
         if isinstance(value, bool):
-            value = "true" if value else "false"
-        existing[env_key] = str(value)
+            rendered[key_map[key]] = "true" if value else "false"
+        else:
+            rendered[key_map[key]] = str(value)
 
-    lines = [
-        "# MailTrace settings written by the application.",
-        "# Environment variables take precedence over values in this file.",
-        "",
-    ]
-    lines.extend(f"{key}={value}" for key, value in sorted(existing.items()))
-    SETTINGS_ENV_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    _merge_env_file(SETTINGS_ENV_FILE, rendered)
     return SETTINGS_ENV_FILE

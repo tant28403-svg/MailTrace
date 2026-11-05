@@ -11,6 +11,12 @@ results locally with masked targets and an audit trail.
 > `uv run mailtrace sources list` and the confirmation prompt before running a
 > scan.
 
+> **Bring your own keys.** MailTrace ships without credentials and refuses to
+> start scans until you configure your own provider key. Keys are read from your
+> per-user config (`~/.config/mailtrace/.env`) or the process environment, never
+> from a bundled or project-local file by default. See
+> [Bring your own API keys](#bring-your-own-api-keys).
+
 ## Features
 
 - **Interactive TUI** — dashboard with live progress, sortable findings,
@@ -54,10 +60,68 @@ mailtrace
 Pre-built binaries may be published on the GitHub Releases page in the future;
 until then use one of the source installs above.
 
+## Bring your own API keys
+
+MailTrace never bundles or shares provider credentials. Scans are **blocked**
+until you configure at least one key-requiring provider (HIBP, BreachDirectory,
+GitHub, Brave Search or VirusTotal). This prevents anyone who clones or receives
+the project from spending the maintainer's API quota.
+
+1. Create your private configuration file:
+
+   ```bash
+   # Linux/macOS
+   mkdir -p ~/.config/mailtrace
+   cp .env.example ~/.config/mailtrace/.env
+
+   # Windows PowerShell
+   New-Item -ItemType Directory -Force "$HOME\.config\mailtrace"
+   Copy-Item .env.example "$HOME\.config\mailtrace\.env"
+   ```
+
+2. Add **your own** keys to that file (or export them in your shell). See
+   [`.env.example`](.env.example) for the full list. HIBP and GitHub are enabled
+   by default; enable BreachDirectory, Brave Search or VirusTotal in the same
+   file if you want those sources to count toward the scan gate.
+
+3. Verify what MailTrace can see:
+
+   ```bash
+   uv run mailtrace config keys status
+   ```
+
+   The status table shows a short SHA-256 fingerprint and the key's source; it
+   never prints the key itself.
+
+4. If you previously kept keys in the project `.env`, move them with:
+
+   ```bash
+   uv run mailtrace config keys migrate
+   ```
+
+   A timestamped backup is written next to the per-user file, not in the project
+   folder. The project copy is stripped of credentials and can then be deleted.
+   Use `--all` to also move recognised non-secret settings.
+
+A project-local `.env` is **ignored by default**, even if it contains keys. For
+development you can explicitly opt in with `MAILTRACE_USE_PROJECT_ENV=1`; the
+per-user file still wins when both define the same key.
+
+If you understand the cost implications and want to allow keyless DNS/emailrep
+runs, set `MAILTRACE_GENERAL_REQUIRE_KEYS=false`. This is an escape hatch, not
+the default.
+
+Key-requiring providers are only run when they are enabled **and** their key is
+present. emailrep.io and DNS need no key, but they do not satisfy the scan gate.
+See [SECURITY.md](SECURITY.md) for the credential-handling policy.
+
 ## Quick Start
 
 ```bash
-# Interactive TUI (default)
+# 1. Configure your own keys first (see the section above)
+uv run mailtrace config keys status
+
+# 2. Interactive TUI (default)
 uv run mailtrace
 
 # Full CLI scan
@@ -74,14 +138,17 @@ uv run mailtrace history list
 uv run mailtrace report CASE-001 --format pdf --output report.pdf
 ```
 
+Without a configured key these scan commands exit with code `2` and print setup
+instructions instead of calling any provider.
+
 > If you installed the console script (`pip install -e .` or
 > `uv tool install mailtrace`), you can drop the `uv run` prefix and call
 > `mailtrace` directly.
 
 ## Configuration
 
-API keys are read from environment variables, a project `.env` file, or
-`~/.config/mailtrace/.env`:
+Credentials are read from the process environment and
+`~/.config/mailtrace/.env` only:
 
 ```bash
 export HIBP_API_KEY="your_hibp_key"                  # HIBP (paid subscription)
@@ -92,12 +159,17 @@ export BRAVE_API_KEY="your_brave_key"                # Brave Search
 export VIRUSTOTAL_API_KEY="your_vt_key"              # VirusTotal
 ```
 
-Non-secret settings can be written by the TUI or the `.env` file:
+A project-local `.env` is ignored unless `MAILTRACE_USE_PROJECT_ENV=1` is set.
+When opted in, the load order is process environment → per-user `.env` →
+project `.env`, so the per-user file always wins.
+
+Non-secret settings can be written by the TUI or the per-user `.env` file:
 
 ```bash
 MAILTRACE_GENERAL_DATA_DIR=~/.local/share/mailtrace
 MAILTRACE_GENERAL_MASK_OUTPUT=true
 MAILTRACE_GENERAL_CONFIRM_EXTERNAL=true
+MAILTRACE_GENERAL_REQUIRE_KEYS=true
 MAILTRACE_GENERAL_LOG_LEVEL=INFO
 MAILTRACE_GENERAL_THEME=dark
 ```
@@ -114,6 +186,7 @@ Provider toggles and timeouts can also be supplied in
 point. The legacy `MAILTRACE_DATA_DIR` spelling is also accepted.
 
 See [`.env.example`](.env.example) for the complete environment reference.
+Never commit or share `.env`, `.env.backup-*`, or copied configuration files.
 
 ## Profiles
 
@@ -124,8 +197,9 @@ See [`.env.example`](.env.example) for the complete environment reference.
 | `domain` | DNS, MX, SPF, DMARC and VirusTotal |
 | `full` | All of the above (default) |
 
-Providers without configured credentials are skipped; DNS and emailrep.io work
-without API keys.
+Providers without configured credentials are skipped. DNS and emailrep.io work
+without keys, but the default scan gate still requires at least one configured
+key-requiring provider (see `MAILTRACE_GENERAL_REQUIRE_KEYS`).
 
 ## Output Formats
 
@@ -160,11 +234,18 @@ uv run pytest
 
 The `report` extra adds ReportLab for PDF export; it is optional for tests.
 
+Secret scanning is enforced in two places: CI runs gitleaks over the full
+history, and `.pre-commit-config.yaml` blocks staged `.env` files and private
+keys. Install the local hook with `pre-commit install` (the gitleaks pre-commit
+hook requires the gitleaks binary on `PATH`).
+
 ## Requirements
 
 - Python 3.12+
 - SQLite (bundled with Python)
-- API keys for external providers (optional — DNS and emailrep.io work without)
+- Your own API key for at least one key-requiring provider (HIBP,
+  BreachDirectory, GitHub, Brave Search or VirusTotal) — MailTrace will not run
+  scans without one
 
 ## License
 

@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import pytest
 from sqlalchemy import func, select
 
 from mailtrace.core import orchestrator as orchestrator_module
@@ -80,7 +81,7 @@ class FakeDNSProvider(BaseProvider):
 
 def _test_config(tmp_path) -> Config:
     return Config(
-        general=GeneralConfig(data_dir=tmp_path),
+        general=GeneralConfig(data_dir=tmp_path, require_keys=False),
         _env_file=None,
         hibp_api_key=None,
         breachdirectory_api_key=None,
@@ -168,9 +169,7 @@ def test_process_findings_correlates_shared_services(tmp_path, monkeypatch):
     orchestrator._process_findings(investigation)
 
     assert len(investigation.correlations) == 1
-    assert (
-        investigation.correlations[0].correlation_type == CorrelationType.SAME_SERVICE
-    )
+    assert investigation.correlations[0].correlation_type == CorrelationType.SAME_SERVICE
 
 
 def test_determine_status():
@@ -191,16 +190,25 @@ def test_determine_status():
         status=ProviderStatus.FAILED,
     )
 
-    assert (
-        Orchestrator._determine_status([completed, empty])
-        == InvestigationStatus.COMPLETE
-    )
-    assert (
-        Orchestrator._determine_status([completed, failed])
-        == InvestigationStatus.PARTIAL
-    )
+    assert Orchestrator._determine_status([completed, empty]) == InvestigationStatus.COMPLETE
+    assert Orchestrator._determine_status([completed, failed]) == InvestigationStatus.PARTIAL
     assert Orchestrator._determine_status([failed]) == InvestigationStatus.FAILED
     assert Orchestrator._determine_status([]) == InvestigationStatus.FAILED
+
+
+async def test_orchestrator_rejects_keyless_runs(tmp_path, monkeypatch):
+    """Direct Python callers cannot bypass the bring-your-own-key gate."""
+    config = _test_config(tmp_path)
+    config.general.require_keys = True
+    monkeypatch.setattr(orchestrator_module, "get_config", lambda: config)
+    orchestrator = Orchestrator()
+
+    with pytest.raises(RuntimeError, match="No API keys configured"):
+        await orchestrator.run_investigation(
+            "victim@example.com",
+            profile=Profile.DOMAIN,
+            authorization_confirmed=True,
+        )
 
 
 async def test_investigation_persistence_uses_processed_findings(tmp_path, monkeypatch):
@@ -221,12 +229,8 @@ async def test_investigation_persistence_uses_processed_findings(tmp_path, monke
         assert len(investigation.findings) == 1
 
         async with get_database_manager().session() as session:
-            runs = await ProviderRunRepository(session).list_by_investigation(
-                investigation.id
-            )
-            findings = await FindingRepository(session).list_by_investigation(
-                investigation.id
-            )
+            runs = await ProviderRunRepository(session).list_by_investigation(investigation.id)
+            findings = await FindingRepository(session).list_by_investigation(investigation.id)
             assert len(runs) == 1
             assert runs[0].status == ProviderStatus.COMPLETED_WITH_FINDINGS
             assert len(findings) == 1

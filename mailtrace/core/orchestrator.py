@@ -272,9 +272,7 @@ class Orchestrator:
             notes=evidence.notes,
         )
 
-    def _pydantic_to_sqlalchemy_correlation(
-        self, correlation: Correlation
-    ) -> CorrelationModel:
+    def _pydantic_to_sqlalchemy_correlation(self, correlation: Correlation) -> CorrelationModel:
         return CorrelationModel(
             id=correlation.id,
             investigation_id=correlation.investigation_id,
@@ -298,6 +296,15 @@ class Orchestrator:
         on_investigation_created: Callable[[Investigation], None] | None = None,
     ) -> Investigation:
         """Run a full investigation."""
+        if not self.config.require_keys_satisfied():
+            raise RuntimeError(
+                "No API keys configured. MailTrace requires you to use your own "
+                "provider keys; scans are disabled until at least one "
+                "key-requiring provider is configured. Run "
+                "`mailtrace config keys status` for setup details, or set "
+                "MAILTRACE_GENERAL_REQUIRE_KEYS=false to allow keyless "
+                "DNS/emailrep-only runs."
+            )
         validation = self.email_validator.validate(email)
         if not validation.valid:
             raise ValueError(f"Invalid email: {validation.error}")
@@ -485,14 +492,10 @@ class Orchestrator:
                 await finding_repo.create(self._pydantic_to_sqlalchemy_finding(finding))
                 for evidence in finding.evidence:
                     evidence.finding_id = finding.id
-                    await evidence_repo.create(
-                        self._pydantic_to_sqlalchemy_evidence(evidence)
-                    )
+                    await evidence_repo.create(self._pydantic_to_sqlalchemy_evidence(evidence))
 
             for correlation in investigation.correlations:
-                await correlation_repo.create(
-                    self._pydantic_to_sqlalchemy_correlation(correlation)
-                )
+                await correlation_repo.create(self._pydantic_to_sqlalchemy_correlation(correlation))
 
     def _process_findings(self, investigation: Investigation) -> None:
         """Deduplicate, correlate, and reassess findings in memory."""
@@ -516,11 +519,7 @@ class Orchestrator:
         elif finding.finding_type == FindingType.REPOSITORY_EXPOSURE:
             key_parts.append(str(finding.raw_data.get("repository", "")))
             key_parts.append(
-                str(
-                    finding.raw_data.get("commit_sha")
-                    or finding.raw_data.get("file_path")
-                    or ""
-                )
+                str(finding.raw_data.get("commit_sha") or finding.raw_data.get("file_path") or "")
             )
         elif finding.finding_type == FindingType.PUBLIC_EXPOSURE:
             key_parts.append(str(finding.raw_data.get("url", "")))
@@ -570,9 +569,7 @@ class Orchestrator:
 
         investigation.correlations = correlations
 
-    def _check_correlation(
-        self, finding_a: Finding, finding_b: Finding
-    ) -> Correlation | None:
+    def _check_correlation(self, finding_a: Finding, finding_b: Finding) -> Correlation | None:
         """Check whether two findings are correlated."""
         if (
             finding_a.service_name
@@ -644,8 +641,7 @@ class Orchestrator:
                     CorrelationType.SAME_PROVIDER_RECORD,
                 )
                 for correlation in investigation.correlations
-                if finding.id
-                in (correlation.finding_a_id, correlation.finding_b_id)
+                if finding.id in (correlation.finding_a_id, correlation.finding_b_id)
             )
             if correlated_high and finding.severity == Severity.INFORMATIONAL:
                 finding.severity = Severity.LOW
@@ -653,16 +649,12 @@ class Orchestrator:
     async def _create_snapshot(self, investigation: Investigation) -> None:
         """Create a historical snapshot for the investigation."""
         finding_ids = [str(finding.id) for finding in investigation.findings]
-        findings_hash = self._hash_finding_ids(
-            [finding.id for finding in investigation.findings]
-        )
+        findings_hash = self._hash_finding_ids([finding.id for finding in investigation.findings])
 
         async with self._database.session() as session:
             inv_repo = InvestigationRepository(session)
             if await inv_repo.get(investigation.id) is None:
-                raise ValueError(
-                    f"Investigation {investigation.id} not found in database"
-                )
+                raise ValueError(f"Investigation {investigation.id} not found in database")
 
             snapshot = SnapshotModel(
                 investigation_id=investigation.id,

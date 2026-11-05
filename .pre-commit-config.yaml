@@ -1,0 +1,27 @@
+# Local guardrails against accidentally committing credentials.
+# Install with: pre-commit install
+# The gitleaks-system hook requires the gitleaks binary on PATH
+# (https://github.com/gitleaks/gitleaks#installing). CI runs gitleaks too.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: ["--maxkb=2048"]
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks-system
+
+  - repo: local
+    hooks:
+      - id: reject-dotenv
+        name: Reject project .env files
+        entry: "Refusing to commit a .env file. Move keys to ~/.config/mailtrace/.env."
+        language: fail
+        files: '(^|/)\.env(\..*)?$'
+        exclude: '(^|/)\.env\.example$'
